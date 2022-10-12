@@ -2,12 +2,13 @@
 from soupsieve import select
 import math
 import rclpy
+from functools import partial
 from rclpy.node import Node
 from turtlesim.msg import Pose
 from geometry_msgs.msg import Twist
 from my_robot_interfaces.msg import Turtle
 from my_robot_interfaces.msg import TurtleArray
-
+from my_robot_interfaces.srv import CatchTurtle
 
 class TurtleControllerNode(Node):  # MODIFY NAME
     def __init__(self):
@@ -61,10 +62,34 @@ class TurtleControllerNode(Node):  # MODIFY NAME
             
 
         else:
+            #target reached 
             msg.linear.x = 0.0
             msg.angular.z = 0.0
+            self.call_catch_turtle_server(self.turtle_to_catch.name)
+            self.turtle_to_catch = None
 
         self.cmd_vel_publisher_.publish(msg)
+
+    def call_catch_turtle_server(self, turtle_name):
+        client = self.create_client(CatchTurtle, "catch_turtle")
+        while not client.wait_for_service(1.0):
+            self.get_logger().warn("Waiting for Server...")
+
+        request = CatchTurtle.Request()
+        request.name = turtle_name
+
+        future = client.call_async(request)
+        future.add_done_callback(
+            partial(self.callback_call_catch_turtle, turtle_name=turtle_name))
+
+    def callback_call_catch_turtle(self, future, turtle_name):
+        try:
+            response = future.result()
+            if not response.success:
+                self.get_logger().error("Turtle" + str(turtle_name) + "could not be caught")
+
+        except Exception as e:
+            self.get_logger().error("Service call failed %r" % (e,))
 
 
 
